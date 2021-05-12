@@ -1,0 +1,423 @@
+// © dgtrd
+//@version=4
+// 
+// SuperTrendRange benefits from both the ATR and Standart Deviation to determine the State of an Instrument
+// with Screener functionality ability to monitor additional 20 financial instruments of your choice
+//
+// Add-Ons
+// * Volatility (Standart Deviation) Colored Price/MA Line (Price Distance (Convergence/Divergence) to its MA)
+//   Price Distance (Convergence/Divergence) to its MA and other custom interpretations 
+//   - https://www.tradingview.com/script/QzjN5jCL-Price-Distance-to-its-MA-by-DGT/
+//   - https://www.tradingview.com/script/ZG82h6Wi-P-MACD-by-DGT/
+//   - https://www.tradingview.com/script/HfNGbuRt-Trading-Psychology-Fear-Greed-Index-by-DGT/
+//   - https://www.tradingview.com/script/Gq9I627Q-MACD-X-More-Than-MACD-by-DGT/
+//
+// * ADX Colored Directional Movement Index Line w/ DI Crosses
+//   ADX Colored Directional Movement Index adaptations
+//   - https://www.tradingview.com/script/3z0WGiZ8-Colored-Directional-Movement-and-Bollinger-Band-s-Cloud-by-DGT/
+//   - https://www.tradingview.com/script/9DH0LwSI-Ichimoku-Colored-SuperTrend-Colored-DMI-by-DGT/
+//   - https://www.tradingview.com/script/nmOlZrRv-Candlestick-Patterns-in-Context-by-DGT/
+//   - https://www.tradingview.com/script/fadiBynQ-Bull-vs-Bear-Power-by-DGT/
+//   
+// * Volume Weighted Colored Bars by Kıvanç Özbilgiç
+
+study(title="SuperTrendRange by DGT", shorttitle="STR by DGT", overlay=true)
+src    = input(close,    "Source", type=input.source)
+length = input(13,       "Length")
+atrm   = input(1.,       "Volatility (ATR) Multiplier"  , step=.1, minval = 0)
+sdm    = input(1.,       "Standard Deviation Multiplier", step=.1, minval = 0)
+sds    = input("Source", "  ⮩ Standard Deviation Source"  , options=["Source", "Moving Average"])
+
+dummy1 = input(false, "═══════ ═══  Options  ═══ ═══════")
+dots   = input(false,    "Dots View (look like Parabolic SAR)")
+hide   = input(false,    "Hide Exponential Moving Average Line")
+back   = input(false,    "Highlight Background")
+nonrep = input(false,    "Enable Non-Repainting Version")
+pll    = input(377,      "Plotting Length")
+
+addons = input(true,  "═══════ ═══  Add-Ons On/Off  ═══ ═══════")
+
+dispDM = input(true,    "⮮ ADX Colored DMI Line Add-On ⮯")
+adxS   = input(14,      "  ⮩ DMI : ADX Smoothing", minval=1)
+diLen  = input(14,      "  ⮩ DMI : DI Length", minval=1)
+strTr  = input(25,      "  ⮩ DMI : Strong Trend Theshold")
+wkTr   = input(17,      "  ⮩ DMI : Week Trend Theshold")
+
+dispPM = input(true,    "⮮ Volatility Colored Price/MA Line Add-On ⮯")
+stDevL = input(.75,     "  ⮩ P/MA : Lower Deviation", minval = 0, step = .25, maxval = 3)
+stDevH = input(2.,      "  ⮩ P/MA : Higher Deviation", minval = 0, step = .25, maxval = 3)
+
+vwcb   = input(true,    "⮮ Volume Weighted Colored Bars Add-On ⮯")
+vwcbL  = input(21,      "  ⮩ VWCB : Volume MA Length", minval=1)
+vwcbU  = input(1.618,   "  ⮩ VWCB : Upper Theshold", minval = 0.1, step = .1)
+vwcbD  = input(.618,    "  ⮩ VWCB : Lower Theshold", minval = 0.1, step = .1)
+
+dispS  = input(false, "═══════ ═════  Screener On/Off  ═════ ═══════")
+histL  = input(0,       "Historical Readings")
+hideR  = input(false,   "Hide Range/Correction Label")
+
+sym01  = input("BINANCE:BTCUSDT"  , "Symbol X", type=input.symbol)
+sym02  = input("BITTREX:ETHUSDT"  , "Symbol X", type=input.symbol)
+sym03  = input("HUOBI:XRPUSDT"    , "Symbol X", type=input.symbol)
+sym04  = input("BINANCE:BCHUSDT"  , "Symbol X", type=input.symbol)
+sym05  = input("BINANCE:LINKUSDT" , "Symbol X", type=input.symbol)
+sym06  = input("BINANCE:BNBUSDT"  , "Symbol X", type=input.symbol)
+sym07  = input("BIST:TCELL"       , "Symbol X", type=input.symbol)
+sym08  = input("BIST:IPEKE"       , "Symbol X", type=input.symbol)
+sym09  = input("BIST:DEVA"        , "Symbol X", type=input.symbol)
+sym10  = input("TVC:DXY"          , "Symbol X", type=input.symbol)
+sym11  = input("TVC:SPX"          , "Symbol X", type=input.symbol)
+sym12  = input("FX_IDC:EURUSD"    , "Symbol X", type=input.symbol)
+sym13  = input("FX_IDC:XAUUSD"    , "Symbol X", type=input.symbol)
+sym14  = input("FX_IDC:XAGUSD"    , "Symbol X", type=input.symbol)
+sym15  = input("NASDAQ:NDAQ"      , "Symbol X", type=input.symbol)
+sym16  = input("NASDAQ:AAPL"      , "Symbol X", type=input.symbol)
+sym17  = input("NASDAQ:NFLX"      , "Symbol X", type=input.symbol)
+sym18  = input("NSE:NIFTY"        , "Symbol X", type=input.symbol)
+sym19  = input("TVC:UKOIL"        , "Symbol X", type=input.symbol)
+sym20  = input("OANDA:SUGARUSD"   , "Symbol X", type=input.symbol)
+
+source = nonrep ? barstate.islast ? src[1] : src : src
+
+// Functions ════════════════════════════════════════════════════════════════════════════════════ //
+
+//------------------------------------------------------------------------------
+// super-trend-range dot function
+
+f_str(_source, _basis, _atr, _stdev) =>
+
+    support      = _basis - _stdev - _atr
+    support_1    = nz(support[1], support)
+    support     := _source > support_1 ? max(support, support_1) : support
+    
+    resistance   = _basis + _stdev + _atr
+    resistance_1 = nz(resistance[1], resistance)
+    resistance  := _source < resistance_1 ? min(resistance, resistance_1) : resistance
+    
+    var a = true
+
+    if _source > _basis 
+        if _source > (_basis + _atr) and _source > (_basis + _stdev)
+            support
+        else if source < (_basis + _atr) or _source < (_basis + _stdev)
+            if a
+                a := false
+                resistance
+            else
+                a := true
+                support
+                
+    else if _source < _basis 
+        if _source < (_basis - _atr) and _source < (_basis - _stdev)
+            resistance
+        else if _source > (_basis - _atr) or _source > (_basis - _stdev)
+            if a
+                a := false
+                resistance
+            else
+                a := true
+                support
+
+//------------------------------------------------------------------------------
+// super-trend-range line function
+
+f_strl(_source, _basis, _atr, _stdev) =>
+
+    support      = _basis - _stdev - _atr
+    support_1    = nz(support[1], support)
+    support     := _source > support_1 ? max(support, support_1) : support
+    
+    resistance   = _basis + _stdev + _atr
+    resistance_1 = nz(resistance[1], resistance)
+    resistance  := _source < resistance_1 ? min(resistance, resistance_1) : resistance
+    
+    if _source > _basis 
+        if _source > (_basis + _atr) and _source > (_basis + _stdev)
+            [1, support, support]
+        else if _source < (_basis + _atr) or _source < (_basis + _stdev)
+            [0, support, resistance]
+    else if _source < _basis 
+        if _source < (_basis - _atr) and _source < (_basis - _stdev)
+            [-1, resistance, resistance]
+        else if _source > (_basis - _atr) or _source > (_basis - _stdev)
+            [0, support, resistance]
+
+//------------------------------------------------------------------------------
+// screener function - supert-trend-range (atr + stdev) and price convergence/divergence combination
+
+f_screener(_source, _length) =>
+
+    // moving average type weighting the most recent prices
+    basis = ema(_source, _length)
+
+    // volatility measurements 
+    // standard deviation (σ) 
+    stdev = sds == "Source" ? sdm * stdev(_source, _length) : sdm * stdev(basis, _length)
+    
+    // average true range (the rma of true range) 
+    atr   = atrm * atr(_length)
+    
+    // price distance to its ma  
+    pma   = (_source/basis - 1) * 100
+    [_, upperL, lowerL] = bb(pma, _length * _length, stDevL)
+    [_, upperH, lowerH] = bb(pma, _length * _length, stDevH)
+    
+    rate = if _source > basis 
+        if _source > (basis + atr) and _source > (basis + stdev)
+            if pma > upperH
+                3
+            else if pma < upperH and pma > upperL
+                2
+            else
+                1
+        else if _source < (basis + atr) or _source < (basis + stdev)
+            0
+    else if _source < basis 
+        if _source < (basis - atr) and _source < (basis - stdev)
+            if pma < lowerH
+                -3
+            else if pma > lowerH and pma < lowerL
+                -2
+            else
+                -1
+        else if _source > (basis - atr) or _source > (basis - stdev)
+            0
+
+    [rate, (close / close[1] - 1) * 100, close, pma]
+
+var f = array.new_float ()
+var s = array.new_string()
+
+f_symt(_sym) => 
+    inst = if dispS 
+        _sym
+    else
+        ''
+    [symv, chg, price, pma] = security(inst, timeframe.period, f_screener(source, length))
+    
+    array.push(f, symv)
+    
+    symf = _sym + " (CHG %: " + tostring(chg, "#.##") + ", P/MA %: " + tostring(pma, "#.##") + ", LAST: " + tostring(price, "#.#####") + ")"
+    symt = 
+     symv ==  3 ? "overvalued ........ "    + symf :
+     symv ==  2 ? "strong bullish ..... "   + symf :
+     symv ==  1 ? "bullish .............. " + symf :
+     symv == -3 ? "undervalued ....... "    + symf :
+     symv == -2 ? "strong bearish ..... "   + symf :
+     symv == -1 ? "bearish ............. "  + symf :
+     "range/correction . "                  + symf 
+    
+    array.push(s, symt)
+
+    ""
+
+// -Calculations ════════════════════════════════════════════════════════════════════════════════ //
+
+//------------------------------------------------------------------------------
+// super-trend-range
+
+basis = ema(source, length)
+stdev = sds == "Source" ? sdm * stdev(source, length) : sdm * stdev(basis, length)
+atr   = atrm * atr(length)
+
+strv  = dots ? f_str(source, basis, atr, stdev) : na
+[dir, resistance, support] = f_strl(source, basis, atr, stdev)
+
+//------------------------------------------------------------------------------
+// super-trend-range alert calculations
+
+alarm = dir != dir[1] and dir != 0
+
+//------------------------------------------------------------------------------
+// adx colored directional movement index line 
+
+[diplus, diminus, adxValue] = dmi(diLen, adxS)
+
+dmiBull = diplus >= diminus and adxValue >= strTr
+dmiBear = diplus <  diminus and adxValue >= strTr
+dmiWeek = adxValue < strTr  and adxValue > wkTr
+
+//------------------------------------------------------------------------------
+// price distance to its moving average
+
+pmar   = (source/basis - 1) * 100
+[_, uL, lL] = bb(pmar, length * length, stDevL)
+[_, uH, lH] = bb(pmar, length * length, stDevH)
+
+//------------------------------------------------------------------------------
+// volume weighted colored bars by KIVANÇ ÖZBİLGİÇ
+
+mean = sma(volume, vwcbL)
+
+//------------------------------------------------------------------------------
+// screener calculations
+
+symt   = dispS ? histL > 0 ? "volatility & price distance screener - historical status (" + tostring(histL) + "-bar(s) back) , timeframe : " + timeframe.period + "\n\n" : "volatility & price distance screener - current status, timeframe : " + timeframe.period + "\n\n" : na
+
+symt00 = dispS ? f_symt(syminfo.ticker) : na
+symt01 = dispS and sym01 != "" ? f_symt(sym01) : na
+symt02 = dispS and sym02 != "" ? f_symt(sym02) : na
+symt03 = dispS and sym03 != "" ? f_symt(sym03) : na
+symt04 = dispS and sym04 != "" ? f_symt(sym04) : na
+symt05 = dispS and sym05 != "" ? f_symt(sym05) : na
+symt06 = dispS and sym06 != "" ? f_symt(sym06) : na
+symt07 = dispS and sym07 != "" ? f_symt(sym07) : na
+symt08 = dispS and sym08 != "" ? f_symt(sym08) : na
+symt09 = dispS and sym09 != "" ? f_symt(sym09) : na
+symt10 = dispS and sym10 != "" ? f_symt(sym10) : na
+symt11 = dispS and sym11 != "" ? f_symt(sym11) : na
+symt12 = dispS and sym12 != "" ? f_symt(sym12) : na
+symt13 = dispS and sym13 != "" ? f_symt(sym13) : na
+symt14 = dispS and sym14 != "" ? f_symt(sym14) : na
+symt15 = dispS and sym15 != "" ? f_symt(sym15) : na
+symt16 = dispS and sym16 != "" ? f_symt(sym16) : na
+symt17 = dispS and sym17 != "" ? f_symt(sym17) : na
+symt18 = dispS and sym18 != "" ? f_symt(sym18) : na
+symt19 = dispS and sym19 != "" ? f_symt(sym19) : na
+symt20 = dispS and sym20 != "" ? f_symt(sym20) : na
+
+// -Colors ══════════════════════════════════════════════════════════════════════════════════════ //
+
+// basis color 
+ema50  = hide ? na : ema(source, 50 )
+ema100 = hide ? na : ema(source, 100)
+ema200 = hide ? na : ema(source, 200)
+
+basisC = hide ? na : basis > nz(ema200, basis) ? basis > nz(ema100, basis) ? basis > ema50 ? color.olive : color.aqua : color.orange : color.maroon
+
+//------------------------------------------------------------------------------
+// super-trend-range 
+
+resistanceColor = dir == -1 ? 
+     dir == dir[1] ? color.new(color.red, 0)   : color.new(color.red, 100)   : 
+     dir == 0 ? 
+     dir == dir[1] ? color.new(color.green, 0) : color.new(color.green, 89)  : 
+     color.new(color.green, 0)
+
+supportColor = dir ==  1 ? 
+     dir == dir[1] ? color.new(color.green, 0) : color.new(color.green, 100) : 
+     dir == 0 ? 
+     dir == dir[1] ? color.new(color.red, 0)   : color.new(color.red, 89)    : 
+     color.new(color.red, 0)
+
+//------------------------------------------------------------------------------
+// adx colored directional movement line 
+
+dmiColor = dmiBull ? (adxValue > adxValue[1] ? #006400 : color.green) : 
+     dmiBear ? (adxValue > adxValue[1] ? #910000 : color.red ): 
+     dmiWeek ? (adxValue > adxValue[1] ? color.black : color.gray) : (adxValue > adxValue[1] ? #FFC40C : color.yellow) 
+
+//------------------------------------------------------------------------------
+// price distance to it's moving average
+
+pmaColor = if pmar >= 0 
+    if pmar > uH
+        #006400
+    else if pmar < uH and pmar > uL
+        color.green
+    else
+        color.gray
+else
+    if pmar < lH
+        #910000
+    else if pmar > lH and pmar < lL
+        color.red
+    else
+        color.black
+
+//------------------------------------------------------------------------------
+// volume weighted colored bars by KIVANÇ ÖZBİLGİÇ
+
+vbcbColor = if close < open
+    if volume > mean * vwcbU
+        #910000
+    //else if volume >= mean * vwcbD and volume <= mean * vwcbU
+    //    color.red
+    else if volume < mean * vwcbD
+        color.orange
+else
+    if volume > mean * vwcbU
+        #006400
+    //else if volume >= mean * vwcbD and volume <= mean * vwcbU
+    //    color.green
+    else if  volume < mean * vwcbD
+        #7FFFD4
+
+
+// -Plotting ════════════════════════════════════════════════════════════════════════════════════ //
+
+//------------------------------------------------------------------------------
+// super-trend-range 
+
+plot(dots ? strv : na,  "SuperTrendRange Dot View", color = strv > basis ? color.red : color.green, style = plot.style_circles, show_last = pll)
+plot(dots ? na : resistance, "SuperTrendRange Line View - Resistance", color = resistanceColor, linewidth=2, show_last = pll)
+plot(dots ? na : support   , "SuperTrendRange Line View - Supoort"   , color = supportColor   , linewidth=2, show_last = pll)
+
+plot(hide ? na : basis, "Exponential Moving Average", color=basisC, linewidth=2, show_last = pll)
+
+bgcolor(color = back ? dir == 0 ? na : dir == -1 ? color.maroon  : color.teal : na , transp = 89, show_last = pll)
+
+alertcondition(alarm, title="Trading Opportunity", message="SuperTrend-Range : Probable Trade Opportunity\n{{exchange}}:{{ticker}}->\nPrice = {{close}},\nTime = {{time}}")
+
+//------------------------------------------------------------------------------
+// adx colored directional movement line 
+
+didir = diplus >= diminus ? true : false
+plotshape(addons and dispDM and diplus >= diminus, style=shape.triangleup  , location=location.top, color=dmiColor, title="DMI Bull", show_last = pll)
+plotshape(addons and dispDM and diplus <  diminus, style=shape.triangledown, location=location.top, color=dmiColor, title="DMI Bear", show_last = pll)
+//plotchar(dispDM and didir != didir[1], char="*"                 , location=location.top, color=#7FFFD4 , title="DI Cross", show_last = pll, size=size.tiny)
+
+//------------------------------------------------------------------------------
+// price distance to it's moving average
+
+plotshape(addons and dispPM and pmar >= 0, style=shape.triangleup  , location=location.bottom, color=pmaColor, title="Price/MA Bull", show_last = pll)
+plotshape(addons and dispPM and pmar <  0, style=shape.triangledown, location=location.bottom, color=pmaColor, title="Price/MA Bear", show_last = pll)
+
+//------------------------------------------------------------------------------
+// volume weighted colored bars by KIVANÇ ÖZBİLGİÇ
+
+barcolor(addons and nz(volume) and vwcb ? vbcbColor : na, title = "Volume Based Colored Bars by [KıvançÖZBİLGİÇ]")
+
+//------------------------------------------------------------------------------
+// Screener Label
+
+if dispS
+    onward = round(change(time) * 3)
+    
+    symtxt   = histL > 0 ? "volatility & price distance screener - historical status (" + tostring(histL) + "-bar(s) back) , timeframe : " + timeframe.period + "\n\n" : "volatility & price distance screener - current status, timeframe : " + timeframe.period + "\n\n"
+    bullText  = "", bearText  = "", rangeText = ""
+
+    for i = 1 to array.size(f)
+        val = array.pop(f)
+        text = array.pop(s)
+        if  val > 0
+            bullText  := text + "\n" + bullText 
+        else if val < 0
+            bearText  := text + "\n" + bearText 
+        else
+            rangeText := text + "\n" + rangeText
+
+    bullText  := symtxt + bullText
+    label bullLabel = label.new(time, hideR ? basis + (atr + stdev) : basis + 3 * (atr + stdev), text = bullText[histL]
+         ,tooltip="user guide - volatility colored price/ma line\n▲ – Bullish , Price Action above Moving Average\n▼ – Bearish , Price Action below Moving Average\n-Gray/Black - Low Volatility\n-Green/Red – Price Action in Threshold Bands\n-Dark Green/Red – Price Action Exceeds Threshold Bands\n\nevaluation given herein does not constitute professional and/or financial advice"
+         ,color=color.green, xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.white, textalign=text.align_left)
+
+    label.set_x(bullLabel, label.get_x(bullLabel) + onward)
+    label.delete(bullLabel[1])
+    
+    bearText := symtxt + bearText
+    label bearLabel = label.new(time, hideR ? basis - (atr + stdev) : basis - 3 * (atr + stdev), text = bearText[histL]
+         ,tooltip="user guide - adx colored dmi\n triangle shapes:\n  ▲- bullish : diplus >= diminus\n  ▼- bearish : diplus < diminus\n* colors:\n  green - bullish trend : adx >= strongTrend and di+ > di-\n  red - bearish trend : adx >= strongTrend and di+ < di- \n  gray - no trend : weekTrend < adx < strongTrend\n  yellow - week trend : adx < weekTrend\n* color density:\n  darker : adx growing\n  lighter : adx falling \n\nevaluation given herein does not constitute professional and/or financial advice"
+         ,color=color.red, xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.white, textalign=text.align_left)
+
+    label.set_x(bearLabel, label.get_x(bearLabel) + onward)
+    label.delete(bearLabel[1])
+    
+    if not hideR
+        rangeText := symtxt + rangeText
+        label rangeLabel = label.new(time, basis, text = rangeText[histL]
+         ,tooltip="user guide - screener\n-range/correction - price action inside volatility boundaries\n-over/under valued - price action exceeds both volatility boundaries and price convergence/divergence theshold bands\n-strong - price action exceeds volatility boundaries and is within price convergence/divergence theshold bands\n-bearish/bullish - price action exceeds volatility boundaries and is below price convergence/divergence theshold bands\n\nevaluation given herein does not constitute professional and/or financial advice"
+         ,color=#0094ff, xloc=xloc.bar_time, style=label.style_label_left, textcolor=color.white, textalign=text.align_left)
+
+        label.set_x(rangeLabel, label.get_x(rangeLabel) + onward)
+        label.delete(rangeLabel[1]) 

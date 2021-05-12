@@ -1,0 +1,38 @@
+//
+// @author simple (originally LazyBear) 
+//
+
+study(title="squeeze momentum — volatility and growth trigger", overlay=false)
+
+lengthBB = input(20, title="BB Length")
+multBB = input(2, title="BB MultFactor")
+lengthKC=input(20, title="KC Length")
+multKC = input(1.75, title="KC MultFactor")
+lengthATR = input(10, title="ATR Length")
+
+// Calculate BB
+source = close
+basis = sma(source, lengthBB)
+dev = multBB * stdev(source, lengthBB)
+upperBB = basis + dev
+lowerBB = basis - dev
+
+// Calculate KC
+ma = ema(source, lengthKC)
+rangema = atr(lengthATR)
+upperKC = ma + rangema * multKC
+lowerKC = ma - rangema * multKC
+
+sqzOn  = (lowerBB > lowerKC) and (upperBB < upperKC) // BB inside KC
+sqzOff = (lowerBB < lowerKC) and (upperBB > upperKC) // KC inside BB
+noSqz  = (sqzOn == false) and (sqzOff == false)
+
+kcVariance = linreg(source - avg(avg(highest(high, lengthKC), lowest(low, lengthKC)), ma), lengthKC, 0)
+
+kcVarianceBarColor = iff( kcVariance > 0, 
+            iff( kcVariance > nz(kcVariance[1]), #05ffa6, color(#05ffa6, 75)),
+            iff( kcVariance < nz(kcVariance[1]), #990040, color(#990040, 65)))
+squeezeColor = noSqz ? #5405ff : sqzOn ? #fbc02d : #ffffff
+
+plot(kcVariance, color=kcVarianceBarColor, style=histogram, linewidth=4, transp=0)
+plot(0 , color=squeezeColor, style=circles, linewidth=2, transp = 0)

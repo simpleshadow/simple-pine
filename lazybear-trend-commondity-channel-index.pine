@@ -1,0 +1,72 @@
+// WaveTrend Oscilator — aka "Trend" Commodity Channel Index (CCI)  
+// 
+// @author simple
+//
+
+//@version=4
+
+study(title="tcci — divergence from trend", overlay=true)
+
+wtChannelLength = input(10, "channel length")
+wtAverageLength = input(21, "average length")
+wtSignalLength = input(4, "signal length")
+wtObLevel = input(40, "over bought level")
+wtOsLevel = input(-20, "over sold level")
+
+colorBlue = color(#05ffff)
+colorMagenta = color(#fe0a6f)
+colorPink = color(#ff0ae2)
+colorTeal = color(#05ffa6)
+colorPurple = color(#5405ff)
+colorYellow = color(#fbc02d)
+ 
+// histColor = isHistIncreasingAbove ? colorTeal : (isHistDecreasingAbove ? color.new(colorTeal, 75) : (isHistDecreasingBelow ? colorMagenta : (isHistIncreasingBelow ? color.new(colorMagenta, 65) : color.white)))
+
+ap = hlc3 
+esa = ema(ap, wtChannelLength)
+d = ema(abs(ap - esa), wtChannelLength)
+ci = (ap - esa) / (0.015 * d)
+tci = ema(ci, wtAverageLength)
+ 
+wtTrend = tci
+wtSignal = sma(wtTrend, wtSignalLength)
+hist = wtTrend - wtSignal
+
+outHist = security(tickerid(syminfo.prefix,syminfo.ticker), timeframe.period, hist)
+
+isHistIncreasingAbove = outHist > outHist[1] and outHist > 0
+isHistDecreasingAbove = outHist < outHist[1] and outHist > 0
+isHistDecreasingBelow = outHist < outHist[1] and outHist <= 0
+isHistIncreasingBelow = outHist > outHist[1] and outHist <= 0
+
+wtTrendColor = (wtTrend >= wtObLevel and wtTrend[1] >= wtObLevel) or (wtSignal <= wtOsLevel and wtSignal[1] <= wtOsLevel) ? colorBlue : color.black
+wtSignalColor = (wtTrend >= wtObLevel and wtTrend[1] >= wtObLevel) or (wtSignal <= wtOsLevel and wtSignal[1] <= wtOsLevel) ? colorPink : colorPurple
+histColor = isHistIncreasingAbove ? colorTeal : (isHistDecreasingAbove ? color.new(colorTeal, 75) : (isHistDecreasingBelow ? colorMagenta : (isHistIncreasingBelow ? color.new(colorMagenta, 65) : color.white)))
+
+
+imd(series, fPeriod) =>
+    fK = 1.0
+    period = max(1.0, fPeriod)
+    float return = na, priorMD = nz(return[1], series)
+    return := priorMD + (series - priorMD) / min(period, max(1.0, fK * period * pow(series / priorMD, 4)))
+    return
+    
+_ap = hlc3 
+_esa = imd(ap, wtChannelLength)
+_d = imd(abs(ap - esa), wtChannelLength)
+_ci = (ap - esa) / (0.015 * d)
+
+mcginley_tci = imd(_ci, wtAverageLength)
+
+
+hline(wtObLevel, "ob level", color = colorMagenta, linestyle=hline.style_dotted, editable=false)
+hline(wtOsLevel, "os level", color = colorTeal, linestyle=hline.style_dotted, editable=false)
+
+plot(wtTrend, "trend", color = wtTrendColor, linewidth = 2)
+plot(wtSignal, "signal", color = wtSignalColor, style = plot.style_line, linewidth = 1)
+plot(hist,  "histogram", color = histColor, style = plot.style_histogram, linewidth = 2)
+plot(cross(wtTrend, wtSignal) ? wtSignal : na, title="crossovers", style=plot.style_circles, linewidth=3, color=wtSignalColor)
+
+// plot(mcginley_tci, "trend", color = color.yellow, linewidth = 1)
+
+

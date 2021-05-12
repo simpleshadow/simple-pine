@@ -1,0 +1,71 @@
+//@version=4
+// Copyright (c) 2019-present, Franklin Moormann (cheatcountry)
+// Ehlers Hilbert Oscillator [CC] script may be freely distributed under the MIT license.
+study("ehler's hilbert oscillator — cyclical + trending price activity", overlay=false)
+
+inp = input(title="Source", type=input.source, defval=hl2)
+res = input(title="Resolution", type=input.resolution, defval="")
+rep = input(title="Allow Repainting?", type=input.bool, defval=true)
+bar = input(title="Allow Bar Color Change?", type=input.bool, defval=false)
+src = security(syminfo.tickerid, res, inp[rep ? 0 : barstate.isrealtime ? 1 : 0])[rep ? 0 : barstate.isrealtime ? 0 : 1]
+
+pi = 2 * asin(1)
+period = 0.0
+smooth = ((4 * src) + (3 * nz(src[1])) + (2 * nz(src[2])) + nz(src[3])) / 10
+detrender = ((0.0962 * smooth) + (0.5769 * nz(smooth[2])) - (0.5769 * nz(smooth[4])) - (0.0962 * nz(smooth[6]))) * ((0.075 * nz(period[1])) + 0.54)
+
+q1 = ((0.0962 * detrender) + (0.5769 * nz(detrender[2])) - (0.5769 * nz(detrender[4])) - (0.0962 * nz(detrender[6]))) * ((0.075 * nz(period[1])) + 0.54)
+i1 = nz(detrender[3])
+
+jI = ((0.0962 * i1) + (0.5769 * nz(i1[2])) - (0.5769 * nz(i1[4])) - (0.0962 * nz(i1[6]))) * ((0.075 * nz(period[1])) + 0.54)
+jQ = ((0.0962 * q1) + (0.5769 * nz(q1[2])) - (0.5769 * nz(q1[4])) - (0.0962 * nz(q1[6]))) * ((0.075 * nz(period[1])) + 0.54)
+
+i2 = i1 - jQ
+i2 := (0.2 * i2) + (0.8 * nz(i2[1]))
+q2 = q1 + jI
+q2 := (0.2 * q2) + (0.8 * nz(q2[1]))
+
+re = (i2 * nz(i2[1])) + (q2 * nz(q2[1]))
+re := (0.2 * re) + (0.8 * nz(re[1]))
+im = (i2 * nz(q2[1])) - (q2 * nz(i2[1]))
+im := (0.2 * im) + (0.8 * nz(im[1]))
+
+period := im != 0 and re != 0 ? 2 * pi / atan(im / re) : 0
+period := min(max(period, 0.67 * nz(period[1])), 1.5 * nz(period[1]))
+period := min(max(period, 6), 50)
+period := (0.2 * period) + (0.8 * nz(period[1]))
+
+smoothPeriod = 0.0
+smoothPeriod := (0.33 * period) + (0.67 * nz(smoothPeriod[1]))
+
+q3 = 0.5 * (smooth - nz(smooth[2])) * ((0.1759 * smoothPeriod) + 0.4607)
+
+i3 = 0.0, sp2 = ceil(smoothPeriod / 2)
+for i = 0 to sp2 - 1
+    i3 := i3 + nz(q3[i])
+i3 := (1.57 * i3) / sp2
+
+v1 = 0.0, sp4 = ceil(smoothPeriod / 4)
+for i = 0 to sp4 - 1
+    v1 := v1 + nz(q3[i])
+v1 := (1.25 * v1) / sp4
+
+sig = src > smooth ? 1 : src < smooth ? -1 : 0
+
+alertcondition(crossover(sig, 0), "Buy Signal", "Bullish Change Detected")
+alertcondition(crossunder(sig, 0), "Sell Signal", "Bearish Change Detected")
+
+colorBlue = color(#05ffff)
+colorMagenta = color(#fe0a6f)
+colorPink = color(#ff0ae2)
+colorTeal = color(#05ffa6)
+colorPurple = color(#5405ff)
+colorYellow = color(#fbc02d)
+colorGreen = color(#3ddb56)
+
+hoColor = sig > 0 ? colorGreen : sig < 0 ? colorMagenta : color.black
+
+barcolor(bar ? hoColor : na)
+plot(v1, title="V", color=colorBlue, linewidth=1)
+plot(i3, title="I", color=colorMagenta, linewidth=1)
+plot(0, title="Smooth", color=hoColor, linewidth=2)
